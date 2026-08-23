@@ -983,14 +983,17 @@ app.put('/compras/:id/status', async (req, res) => {
   }
 });
 
-// ==================== RESET PERIÓDICO ====================
-// Roda a cada 1h: zera dados de domínio E remove usuários cadastrados pelos clientes,
-// mantendo apenas os 3 usuários iniciais (admin, funcionário, aluno).
+// ==================== RESET MANUAL ====================
+// Zera dados de domínio E remove usuários cadastrados pelos clientes, mantendo
+// apenas os 3 usuários iniciais (admin, funcionário, aluno). Era um setInterval
+// de 1h, mas o timer mantinha o processo sempre vivo para o LiteSpeed, que
+// nunca reciclava a instância — e cada instância residente conta contra o
+// limite de 120 processos compartilhado da conta. Agora o reset é disparado
+// pela página /reset.html (ou POST /reset) quando alguém precisar dele.
 
-const RESET_INTERVAL_MS = 60 * 60 * 1000;
 const SEED_PASSWORD_HASH = '$2a$10$0LBTu0kBOfcz5vqFlk8wTuY1TCHoBWTTmz6sd/bflLB5yObRb566W'; // hash de "123456"
 
-async function resetPeriodico() {
+async function resetBase() {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -1032,17 +1035,31 @@ async function resetPeriodico() {
     await conn.query('ALTER TABLE usuarios      AUTO_INCREMENT = 4');
 
     console.log(`[reset] ${new Date().toISOString()} - estado inicial restaurado (3 usuários, 2 livros, 0 domínio)`);
+    return true;
   } catch (err) {
     await conn.rollback();
     console.error('[reset] Erro:', err.message);
+    return false;
   } finally {
     conn.release();
   }
 }
 
-if (require.main === module) {
-  setInterval(resetPeriodico, RESET_INTERVAL_MS);
-}
+/**
+ * @swagger
+ * /reset:
+ *   post:
+ *     summary: Restaura a base ao estado inicial (3 usuários, 2 livros, sem compras/arrendamentos/favoritos)
+ *     tags: [Sistema]
+ *     responses:
+ *       200: { description: Base restaurada }
+ *       500: { description: Falha ao restaurar, detalhe no log do servidor }
+ */
+app.post('/reset', async (req, res) => {
+  const ok = await resetBase();
+  if (ok) return res.json({ mensagem: 'Base restaurada ao estado inicial' });
+  res.status(500).json({ mensagem: 'Falha ao restaurar a base' });
+});
 
 // ==================== SWAGGER ====================
 
@@ -1063,6 +1080,14 @@ if (require.main === module) {
     console.log(`Servidor rodando em http://localhost:${PORT}/login.html`);
     console.log(`Swagger: http://localhost:${PORT}/api-docs`);
   });
+
+  // O LiteSpeed encerra o app com SIGTERM (deploy, restart, reciclagem). Sem
+  // handler, instância presa só morre por SIGKILL e fica ocupando o limite de
+  // processos da conta enquanto isso. Saída imediata de propósito: os dados
+  // moram no MySQL e fechar o pool com query em voo é pior do que deixar o
+  // sistema operacional recolher os sockets.
+  process.on('SIGTERM', () => process.exit(0));
+  process.on('SIGINT', () => process.exit(0));
 }
 
 module.exports = app;
