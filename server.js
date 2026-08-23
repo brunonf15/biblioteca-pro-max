@@ -1064,11 +1064,11 @@ app.post('/reset', async (req, res) => {
   res.status(500).json({ mensagem: 'Falha ao restaurar a base' });
 });
 
-// Rota explícita além do express.static: a camada de estáticos do host provou
-// servir uma cópia velha da pasta public e engolir arquivos novos, e esta
-// página precisa existir para o reset manual. Se o arquivo faltar na árvore,
-// cai numa versão mínima embutida em vez de 404.
-app.get('/reset.html', (req, res) => {
+// Rota explícita além do express.static: a borda da Hostinger decide caminhos
+// *.html sozinha e nunca entregou o reset.html novo, então a página também
+// vive em GET /reset — caminho sem .html sempre chega ao app. Se o arquivo
+// faltar na árvore, cai numa versão mínima embutida em vez de 404.
+app.get(['/reset', '/reset.html'], (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'reset.html'), (err) => {
     if (!err) return;
     res.type('html').send(
