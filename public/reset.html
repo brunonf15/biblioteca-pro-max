@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset - Biblioteca</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="auth-container">
+    <h1>🔄 Reset da base</h1>
+    <p>Restaura a base ao estado inicial: 3 usuários de seed, 2 livros e nenhuma compra, arrendamento ou favorito. Use entre turmas ou quando os dados de teste bagunçarem.</p>
+    <button id="btn-reset" type="button">Restaurar estado inicial</button>
+    <p id="resultado" role="status"></p>
+  </div>
+  <script>
+    const btn = document.getElementById('btn-reset');
+    const resultado = document.getElementById('resultado');
+    btn.addEventListener('click', async () => {
+      if (!confirm('Isto apaga todos os dados criados e volta ao estado inicial. Continuar?')) return;
+      btn.disabled = true;
+      resultado.textContent = 'Restaurando...';
+      try {
+        const resp = await fetch('/reset', { method: 'POST' });
+        const dados = await resp.json();
+        resultado.textContent = resp.ok ? dados.mensagem : 'Erro: ' + dados.mensagem;
+      } catch (err) {
+        resultado.textContent = 'Erro de rede: ' + err.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
