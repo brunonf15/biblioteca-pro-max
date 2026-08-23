@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const bcrypt = require('bcryptjs');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
@@ -19,7 +20,9 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.static('public'));
+// Caminho absoluto: com caminho relativo o diretório dependia do cwd que o
+// Passenger escolhe, e a camada de estáticos da Hostinger serviu cópia velha.
+app.use(express.static(path.join(__dirname, 'public')));
 
 const LIVRO_SELECT = `
   id,
@@ -1059,6 +1062,26 @@ app.post('/reset', async (req, res) => {
   const ok = await resetBase();
   if (ok) return res.json({ mensagem: 'Base restaurada ao estado inicial' });
   res.status(500).json({ mensagem: 'Falha ao restaurar a base' });
+});
+
+// Rota explícita além do express.static: a camada de estáticos do host provou
+// servir uma cópia velha da pasta public e engolir arquivos novos, e esta
+// página precisa existir para o reset manual. Se o arquivo faltar na árvore,
+// cai numa versão mínima embutida em vez de 404.
+app.get('/reset.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'reset.html'), (err) => {
+    if (!err) return;
+    res.type('html').send(
+      '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Reset - Biblioteca</title></head>' +
+        '<body style="font-family:sans-serif;max-width:480px;margin:40px auto;text-align:center">' +
+        '<h1>🔄 Reset da base</h1><p>Restaura a base ao estado inicial (3 usuários, 2 livros).</p>' +
+        '<button onclick="fazerReset()">Restaurar estado inicial</button><p id="resultado"></p>' +
+        '<script>async function fazerReset(){if(!confirm("Isto apaga todos os dados criados. Continuar?"))return;' +
+        'const el=document.getElementById("resultado");el.textContent="Restaurando...";' +
+        'try{const r=await fetch("/reset",{method:"POST"});const d=await r.json();el.textContent=d.mensagem;}' +
+        'catch(e){el.textContent="Erro: "+e.message;}}</script></body></html>',
+    );
+  });
 });
 
 // ==================== SWAGGER ====================
