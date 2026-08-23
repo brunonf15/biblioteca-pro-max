@@ -1041,7 +1041,11 @@ async function resetPeriodico() {
 }
 
 if (require.main === module) {
-  setInterval(resetPeriodico, RESET_INTERVAL_MS);
+  // unref: o timer roda enquanto o processo viver, mas não pode ser o motivo
+  // de ele viver. Sem isto o LiteSpeed nunca considera a instância ociosa e
+  // cada processo vira residente permanente contra o limite de 120 processos
+  // compartilhado da conta.
+  setInterval(resetPeriodico, RESET_INTERVAL_MS).unref();
 }
 
 // ==================== SWAGGER ====================
@@ -1063,6 +1067,14 @@ if (require.main === module) {
     console.log(`Servidor rodando em http://localhost:${PORT}/login.html`);
     console.log(`Swagger: http://localhost:${PORT}/api-docs`);
   });
+
+  // O LiteSpeed encerra o app com SIGTERM (deploy, restart, reciclagem). Sem
+  // handler, instância presa só morre por SIGKILL e fica ocupando o limite de
+  // processos da conta enquanto isso. Saída imediata de propósito: os dados
+  // moram no MySQL e fechar o pool com query em voo é pior do que deixar o
+  // sistema operacional recolher os sockets.
+  process.on('SIGTERM', () => process.exit(0));
+  process.on('SIGINT', () => process.exit(0));
 }
 
 module.exports = app;
